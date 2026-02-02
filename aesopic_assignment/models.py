@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 class PlannerOutput:
     platform: str
     repo: str
+    search_query: str
     goal: str
     fields: List[str]
     required_entities: List[str]

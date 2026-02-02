@@ -27,8 +27,8 @@ class Planner:
             raise ValueError("Unable to resolve repo. Pass --repo owner/name or include it in --prompt.")
 
         normalized_fields = self._normalize_fields(fields)
-        # Search query: first part of owner/name for GitHub search (assignment: search for "openclaw")
-        search_query = resolved_repo.split("/")[0] if "/" in resolved_repo else resolved_repo
+        # Search query: repo name (assignment: search for "openclaw")
+        search_query = resolved_repo.split("/", 1)[-1] if "/" in resolved_repo else resolved_repo
         return PlannerOutput(
             platform="github",
             repo=resolved_repo,

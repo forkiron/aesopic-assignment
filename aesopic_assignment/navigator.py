@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from dataclasses import asdict
 from typing import Optional
 
@@ -44,8 +43,9 @@ class Navigator:
             if vision_state.confidence >= self.config.min_confidence and vision_state.action:
                 if vision_state.action == "done" and state.name == "releases_page":
                     return
-                if vision_state.action == "type_search" and vision_state.target:
-                    if self.driver.fill_searchbox_and_submit(vision_state.target):
+                if vision_state.action == "type_search":
+                    query = vision_state.target or plan.search_query
+                    if self.driver.fill_searchbox_and_submit(query):
                         self._act(Action(kind="wait", value="2000"))
                         continue
                 if vision_state.action == "click" and vision_state.target:
@@ -60,14 +60,13 @@ class Navigator:
                     continue
 
             if state.name == "home":
-                if plan.search_query:
-                    if self.driver.fill_searchbox_and_submit(plan.search_query):
-                        self._act(Action(kind="wait", value="2000"))
-                        continue
-                    # Homepage is sign-up focused and has no visible search box → go straight to search
-                    self.driver.goto_search(plan.search_query)
+                if self.driver.fill_searchbox_and_submit(plan.search_query):
                     self._act(Action(kind="wait", value="2000"))
                     continue
+                # Homepage is sign-up focused and has no visible search box → go straight to search
+                self.driver.goto_search(plan.search_query)
+                self._act(Action(kind="wait", value="2000"))
+                continue
                 self._act(Action(kind="goto", target=repo_url))
                 continue
 
@@ -75,12 +74,6 @@ class Navigator:
                 if self.driver.click_by_text(plan.repo) or self.driver.click_by_role("link", plan.repo):
                     self._act(Action(kind="wait", value="2000"))
                     continue
-
-            # Fallback: direct URL when stuck
-            if "/releases" not in self.driver.url():
-                self._act(Action(kind="goto", target=f"{repo_url}/releases"))
-                self._act(Action(kind="wait", value="1500"))
-                continue
 
             if self._verification_pass(plan.repo):
                 return
