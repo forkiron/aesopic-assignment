@@ -12,9 +12,12 @@ class PageState:
 
 def detect_state(url: str, title: str, text_sample: str) -> PageState:
     normalized_title = title.lower()
-    normalized_url = url.lower()
+    normalized_url = url.lower().rstrip("/")
     normalized_text = text_sample.lower()
 
+    # Exact GitHub home (must check before generic "github.com and path" rule).
+    if normalized_url in ("https://github.com", "http://github.com"):
+        return PageState("home", 0.85, "GitHub homepage URL")
     if "/search" in normalized_url or "search results" in normalized_title:
         return PageState("search_results", 0.9, "url/title indicates search results")
     if "/releases" in normalized_url or "releases" in normalized_title:
@@ -25,6 +28,6 @@ def detect_state(url: str, title: str, text_sample: str) -> PageState:
         if "releases" in normalized_text:
             return PageState("repo_page", 0.7, "repo page text includes releases")
         return PageState("repo_page", 0.5, "github url structure")
-    if "github" in normalized_title or normalized_url == "https://github.com/" or normalized_url == "https://github.com":
-        return PageState("home", 0.4, "github landing")
+    if "github" in normalized_title:
+        return PageState("home", 0.4, "github landing title")
     return PageState("unknown", 0.2, "no match")

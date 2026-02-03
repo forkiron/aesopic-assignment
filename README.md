@@ -45,24 +45,7 @@ python -m aesopic_assignment.cli --repo openclaw/openclaw
 python -m aesopic_assignment.cli --prompt "search for openclaw and get the current release and related tags"
 ```
 
-**Slow down navigation (recommended for rate limits / slow browsers):**
-
-```bash
-python -m aesopic_assignment.cli --repo openclaw/openclaw --action-delay-ms 4000
-```
-Optionally add Playwright slow motion for extra caution:
-`--slow-mo-ms 100`
-
-Throttle DOM probing if your browser is slow or pages are heavy:
-`--dom-probe-interval-ms 10000`
-
-Print console logs of each step:
-`--verbose`
-
-Reduce screenshot overhead:
-`--screenshot-interval-steps 2` (every 2 steps) and `--screenshot-timeout-ms 8000`
-
-**Other options:** `--fields version,tag,author,...` · `--headless` to hide the browser.
+**Optional:** `--headless`, `--quiet`, `--action-delay-ms 1000`, `--screenshot-timeout-ms 8000`, `--no-block-resources` (disable image/font blocking if pages break)
 
 Output is JSON in the required shape, e.g.:
 
@@ -79,9 +62,13 @@ Output is JSON in the required shape, e.g.:
 
 ## Design
 
-- **Vision-driven:** GPT-4 Vision (or stub) classifies page state and decides next action (search, click repo, click Releases). Extraction is also vision-based (screenshot → JSON); no hardcoded selectors.
-- **Fallbacks:** Uses semantic roles (e.g. `searchbox`, link text) and URL heuristics when vision confidence is low. Tries system Chrome first, then Playwright Chromium.
-- **Logging:** Steps and screenshots go to `runs/<timestamp>/`.
+**First layer: OpenAI Vision LLM.** We observe the page by sending a screenshot to the vision model; it returns page state and the next action (type_search, click, done). Extraction is also vision-based (releases screenshot → JSON). No DOM or selectors for observation.
+
+**Fallback / execution: Playwright.** Playwright runs the browser (Chrome/Chromium), loads pages, takes the viewport screenshots we send to the LLM, and executes the actions the LLM chooses (goto, click by role/text). If we have no screenshot or no API key, we fall back to URL/title-only heuristics and still use Playwright to act.
+
+So: **observe with vision first**, then **run with Playwright** (and fall back to non-vision observation only when needed).
+
+- **Logging:** Steps and screenshots in `runs/<timestamp>/`. Use `--quiet` to disable console logs.
 
 ## Structure
 

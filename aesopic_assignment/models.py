@@ -12,7 +12,7 @@ class PlannerOutput:
     fields: List[str]
     required_entities: List[str]
     success_criteria: List[str]
-    search_query: str = ""  # e.g. "openclaw" to search from GitHub home
+    search_query: str = ""
 
 
 @dataclass
@@ -25,16 +25,14 @@ class Action:
 
 @dataclass
 class NavigatorConfig:
-    headless: bool = True
-    timeout_ms: int = 20_000
-    max_steps: int = 20
-    min_confidence: float = 0.6
-    action_delay_ms: int = 4_000  # slow down actions for rate limits / slow browsers
-    slow_mo_ms: int = 0  # Playwright-level slow motion (ms) between low-level actions
-    dom_probe_interval_ms: int = 10_000  # throttle DOM reads (text/a11y) for slow pages
-    verbose: bool = False  # console logs of navigation steps
-    screenshot_interval_steps: int = 1  # take screenshot every N steps
-    screenshot_timeout_ms: int = 10_000  # screenshot timeout to avoid hangs
+    headless: bool = False
+    timeout_ms: int = 30_000
+    max_steps: int = 15
+    min_confidence: float = 0.5
+    action_delay_ms: int = 1_000
+    screenshot_timeout_ms: int = 8_000
+    verbose: bool = True
+    block_resources: bool = True  # block images/fonts to reduce lag (Playwright best practice)
 
 
 @dataclass
