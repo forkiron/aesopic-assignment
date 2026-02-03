@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+import time
 from typing import Optional
 
 from .models import Action, NavigatorConfig, PlannerOutput
@@ -21,6 +22,7 @@ class Navigator:
         self.vision = vision or StubVisionModel()
         self.logger = logger or RunLogger()
         self.driver = PlaywrightDriver(self.config)
+        self._last_dom_probe = 0.0
 
     def close(self) -> None:
         self.driver.close()
@@ -29,14 +31,26 @@ class Navigator:
         # Assignment flow: start at github.com, then search → click repo → click Releases
         github_home = "https://github.com"
         repo_url = f"https://github.com/{plan.repo}"
+        self.logger.log_event(f"[nav] start github_home={github_home} repo={plan.repo}")
         self._act(Action(kind="goto", target=github_home))
         self._act(Action(kind="wait", value="1500"))
 
         for _ in range(self.config.max_steps):
-            screenshot_path = self.logger.log_screenshot(self.driver.page)
+            screenshot_path = None
+            if self.logger.step % max(1, self.config.screenshot_interval_steps) == 0:
+                screenshot_path = self.logger.log_screenshot(
+                    self.driver.page, timeout_ms=self.config.screenshot_timeout_ms
+                )
             state, vision_state = self._observe(plan, screenshot_path)
+            self.logger.log_event(
+                "[nav] state="
+                f"{state.name} conf={state.confidence:.2f} "
+                f"vision_state={vision_state.state} vconf={vision_state.confidence:.2f} "
+                f"action={vision_state.action or 'none'} target={vision_state.target or ''}"
+            )
 
             if state.name == "releases_page" and state.confidence >= self.config.min_confidence:
+                self.logger.log_event("[nav] reached releases page")
                 return
 
             # Use vision's recommended action when confidence is high
@@ -46,24 +60,29 @@ class Navigator:
                 if vision_state.action == "type_search":
                     query = vision_state.target or plan.search_query
                     if self.driver.fill_searchbox_and_submit(query):
+                        self.logger.log_event(f"[nav] type_search query={query}")
                         self._act(Action(kind="wait", value="2000"))
                         continue
                 if vision_state.action == "click" and vision_state.target:
                     if self.driver.click_by_text(vision_state.target) or self.driver.click_by_role("link", vision_state.target):
+                        self.logger.log_event(f"[nav] click target={vision_state.target}")
                         self._act(Action(kind="wait", value="2000"))
                         continue
 
             # Heuristic fallbacks (semantic: role/text, no hardcoded CSS)
             if state.name == "repo_page":
                 if self._click_releases_link():
+                    self.logger.log_event("[nav] click Releases")
                     self._act(Action(kind="wait", value="2000"))
                     continue
 
             if state.name == "home":
                 if self.driver.fill_searchbox_and_submit(plan.search_query):
+                    self.logger.log_event(f"[nav] search submit query={plan.search_query}")
                     self._act(Action(kind="wait", value="2000"))
                     continue
                 # Homepage is sign-up focused and has no visible search box → go straight to search
+                self.logger.log_event("[nav] searchbox not found; goto search results")
                 self.driver.goto_search(plan.search_query)
                 self._act(Action(kind="wait", value="2000"))
                 continue
@@ -72,10 +91,12 @@ class Navigator:
 
             if state.name == "search_results":
                 if self.driver.click_by_text(plan.repo) or self.driver.click_by_role("link", plan.repo):
+                    self.logger.log_event(f"[nav] click repo link {plan.repo}")
                     self._act(Action(kind="wait", value="2000"))
                     continue
 
             if self._verification_pass(plan.repo):
+                self.logger.log_event("[nav] verification pass; done")
                 return
 
         raise RuntimeError("Navigation failed: max steps exceeded")
@@ -83,13 +104,21 @@ class Navigator:
     def _observe(self, plan: PlannerOutput, screenshot_path: str) -> tuple[PageState, VisionDecision]:
         title = self.driver.title()
         url = self.driver.url()
-        text_sample = self.driver.page.locator("body").inner_text()[:2000]
 
         vision_state = self.vision.classify_state(screenshot_path, plan.required_entities)
         if vision_state.confidence >= self.config.min_confidence and self._entities_satisfied(
             plan.required_entities, vision_state.found_entities
         ):
             return PageState(vision_state.state, vision_state.confidence, "vision classification"), vision_state
+
+        text_sample = ""
+        now = time.monotonic()
+        if (now - self._last_dom_probe) * 1000 >= self.config.dom_probe_interval_ms:
+            text_sample = self.driver.page.locator("body").inner_text()[:2000]
+            self._last_dom_probe = now
+            self.logger.log_event("[nav] dom_probe=body_text")
+        else:
+            self.logger.log_event("[nav] dom_probe=skipped")
 
         heuristic = detect_state(url=url, title=title, text_sample=text_sample)
         if self._a11y_verification_pass(plan):
@@ -110,6 +139,9 @@ class Navigator:
         return False
 
     def _a11y_verification_pass(self, plan: PlannerOutput) -> bool:
+        now = time.monotonic()
+        if (now - self._last_dom_probe) * 1000 < self.config.dom_probe_interval_ms:
+            return False
         snapshot = self.driver.accessibility_snapshot()
         if not snapshot:
             return False
@@ -153,5 +185,8 @@ class Navigator:
             self.driver.scroll(int(action.value or "800"))
         elif action.kind == "back":
             self.driver.back()
+
+        if action.kind != "wait" and self.config.action_delay_ms > 0:
+            self.driver.wait(self.config.action_delay_ms)
 
         self.logger.bump()

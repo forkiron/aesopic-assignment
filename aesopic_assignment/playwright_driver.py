@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import Optional
-
 from playwright.sync_api import Page, sync_playwright
 
 from .models import Action, NavigatorConfig
@@ -19,22 +17,38 @@ class PlaywrightDriver:
     def __init__(self, config: NavigatorConfig) -> None:
         self.config = config
         self.playwright = sync_playwright().start()
+        self.browser = None
         self.browser = self._launch_browser()
         self.page = self.browser.new_page()
         self.page.set_default_timeout(config.timeout_ms)
+        if config.verbose:
+            self.page.on(
+                "console",
+                lambda msg: print(f"[browser:{msg.type}] {msg.text}"),
+            )
+        # Reduce GPU/WebGL issues on slower machines.
+        try:
+            self.page.emulate_media(reduced_motion="reduce")
+        except Exception:
+            pass
 
     def _launch_browser(self):
         # Prefer system Chrome (no playwright install needed)
         for channel in ("chrome", "chromium", "msedge"):
             try:
                 return self.playwright.chromium.launch(
-                    headless=self.config.headless, channel=channel
+                    headless=self.config.headless,
+                    channel=channel,
+                    slow_mo=self.config.slow_mo_ms,
                 )
             except Exception:
                 continue
         # Fallback: Playwright's bundled Chromium
         try:
-            return self.playwright.chromium.launch(headless=self.config.headless)
+            return self.playwright.chromium.launch(
+                headless=self.config.headless,
+                slow_mo=self.config.slow_mo_ms,
+            )
         except Exception as e:
             self.playwright.stop()
             err_text = str(e).lower()
@@ -43,7 +57,8 @@ class PlaywrightDriver:
             raise
 
     def close(self) -> None:
-        self.browser.close()
+        if self.browser:
+            self.browser.close()
         self.playwright.stop()
 
     def goto(self, url: str) -> None:
@@ -120,4 +135,3 @@ class PlaywrightDriver:
 
     def url(self) -> str:
         return self.page.url
-

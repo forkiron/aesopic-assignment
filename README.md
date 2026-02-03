@@ -45,7 +45,24 @@ python -m aesopic_assignment.cli --repo openclaw/openclaw
 python -m aesopic_assignment.cli --prompt "search for openclaw and get the current release and related tags"
 ```
 
-**Optional:** `--fields version,tag,author,published_at,notes,assets` · `--no-headless` to show the browser.
+**Slow down navigation (recommended for rate limits / slow browsers):**
+
+```bash
+python -m aesopic_assignment.cli --repo openclaw/openclaw --action-delay-ms 4000
+```
+Optionally add Playwright slow motion for extra caution:
+`--slow-mo-ms 100`
+
+Throttle DOM probing if your browser is slow or pages are heavy:
+`--dom-probe-interval-ms 10000`
+
+Print console logs of each step:
+`--verbose`
+
+Reduce screenshot overhead:
+`--screenshot-interval-steps 2` (every 2 steps) and `--screenshot-timeout-ms 8000`
+
+**Other options:** `--fields version,tag,author,...` · `--headless` to hide the browser.
 
 Output is JSON in the required shape, e.g.:
 

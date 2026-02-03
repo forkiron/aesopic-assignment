@@ -30,8 +30,42 @@ def parse_args() -> argparse.Namespace:
         default="gpt-4o-mini",
         help="OpenAI vision model name (default: gpt-4o-mini)",
     )
-    parser.add_argument("--headless", action="store_true", help="Run browser in headless mode")
-    parser.add_argument("--no-headless", action="store_true", help="Run browser with UI")
+    parser.add_argument("--headless", action="store_true", help="Run browser in headless mode (no window)")
+    parser.add_argument(
+        "--action-delay-ms",
+        type=int,
+        default=4000,
+        help="Delay after each high-level action (ms). Helps with slow browsers / rate limits.",
+    )
+    parser.add_argument(
+        "--slow-mo-ms",
+        type=int,
+        default=0,
+        help="Playwright slow motion (ms) between low-level actions.",
+    )
+    parser.add_argument(
+        "--dom-probe-interval-ms",
+        type=int,
+        default=10000,
+        help="Minimum interval between DOM text/a11y probes (ms).",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print navigation logs to the console.",
+    )
+    parser.add_argument(
+        "--screenshot-interval-steps",
+        type=int,
+        default=1,
+        help="Take a screenshot every N steps (1 = every step).",
+    )
+    parser.add_argument(
+        "--screenshot-timeout-ms",
+        type=int,
+        default=10000,
+        help="Screenshot timeout (ms) to avoid hangs.",
+    )
     return parser.parse_args()
 
 
@@ -39,21 +73,29 @@ def main() -> None:
     load_dotenv()
     args = parse_args()
     fields = args.fields.split(",") if args.fields else None
-    headless = True
-    if args.no_headless:
-        headless = False
-    elif args.headless:
-        headless = True
+    headless = args.headless  # default: show browser so you can see it
 
     planner = Planner()
     plan = planner.plan(prompt=args.prompt, repo=args.repo, fields=fields)
 
-    logger = RunLogger()
+    logger = RunLogger(print_to_console=args.verbose)
     if os.getenv("OPENAI_API_KEY"):
         vision = OpenAIVisionModel(model=args.vision_model)
     else:
         vision = StubVisionModel()
-    navigator = Navigator(config=NavigatorConfig(headless=headless), logger=logger, vision=vision)
+    navigator = Navigator(
+        config=NavigatorConfig(
+            headless=headless,
+            action_delay_ms=max(0, int(args.action_delay_ms)),
+            slow_mo_ms=max(0, int(args.slow_mo_ms)),
+            dom_probe_interval_ms=max(0, int(args.dom_probe_interval_ms)),
+            verbose=bool(args.verbose),
+            screenshot_interval_steps=max(1, int(args.screenshot_interval_steps)),
+            screenshot_timeout_ms=max(0, int(args.screenshot_timeout_ms)),
+        ),
+        logger=logger,
+        vision=vision,
+    )
 
     try:
         navigator.run(plan)

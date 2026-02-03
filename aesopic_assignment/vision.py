@@ -19,7 +19,7 @@ class VisionDecision:
 
 
 class VisionModel:
-    def classify_state(self, screenshot_path: str, required_entities: List[str]) -> VisionDecision:
+    def classify_state(self, screenshot_path: Optional[str], required_entities: List[str]) -> VisionDecision:
         raise NotImplementedError
 
     def locate_target(self, screenshot_path: str, label: str) -> Optional[Tuple[int, int]]:
@@ -38,7 +38,7 @@ class StubVisionModel(VisionModel):
     confidence result so the navigator falls back to DOM heuristics.
     """
 
-    def classify_state(self, screenshot_path: str, required_entities: List[str]) -> VisionDecision:
+    def classify_state(self, screenshot_path: Optional[str], required_entities: List[str]) -> VisionDecision:
         return VisionDecision(confidence=0.0, state="unknown", found_entities=[], action=None, target=None)
 
     def locate_target(self, screenshot_path: str, label: str) -> Optional[Tuple[int, int]]:
@@ -54,7 +54,9 @@ class OpenAIVisionModel(VisionModel):
         self.max_tokens = max_tokens
         self.client = OpenAI()
 
-    def classify_state(self, screenshot_path: str, required_entities: List[str]) -> VisionDecision:
+    def classify_state(self, screenshot_path: Optional[str], required_entities: List[str]) -> VisionDecision:
+        if not screenshot_path:
+            return VisionDecision(confidence=0.0, state="unknown", found_entities=[], action=None, target=None)
         try:
             image_url = _image_to_data_url(screenshot_path)
             instructions = (
