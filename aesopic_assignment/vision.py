@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import sys
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -83,7 +84,7 @@ class OpenAIVisionModel(VisionModel):
                     "target": {"type": "string"},
                     "notes": {"type": "string"},
                 },
-                "required": ["state", "confidence", "found_entities", "action", "target"],
+                "required": ["state", "confidence", "found_entities", "action", "target", "notes"],
                 "additionalProperties": False,
             }
 
@@ -129,7 +130,8 @@ class OpenAIVisionModel(VisionModel):
                 action=action,
                 target=str(target).strip() if target else None,
             )
-        except Exception:
+        except Exception as e:
+            print(f"[vision] classify_state failed: {type(e).__name__}: {e}", file=sys.stderr)
             return VisionDecision(confidence=0.0, state="unknown", found_entities=[], action=None, target=None)
 
     def extract_release(self, screenshot_path: str, repository: str) -> Optional[Dict[str, Any]]:
@@ -155,7 +157,7 @@ class OpenAIVisionModel(VisionModel):
                             "notes": {"type": "string"},
                         },
                         "required": [],
-                        "additionalProperties": True,
+                        "additionalProperties": False,
                     },
                 },
                 "required": ["repository", "latest_release"],
@@ -195,7 +197,8 @@ class OpenAIVisionModel(VisionModel):
                 "assets": [],
                 "raw": {"url": None, "vision_extracted": True},
             }
-        except Exception:
+        except Exception as e:
+            print(f"[vision] extract_release failed: {type(e).__name__}: {e}", file=sys.stderr)
             return None
 
 

@@ -3,8 +3,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
+
+# Load .env from project root (directory containing aesopic_assignment/)
+_project_root = Path(__file__).resolve().parent.parent
+_env_path = _project_root / ".env"
 
 from .extractor import Extractor
 from .models import NavigatorConfig
@@ -29,14 +34,15 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
-    load_dotenv()
+    load_dotenv(_env_path)
     args = parse_args()
     repo = args.repo_flag or args.repo
     plan = Planner().plan(prompt=args.prompt, repo=repo, fields=None)
     logger = RunLogger(print_to_console=not args.quiet)
     logger.log_event(f"[cli] plan repo={plan.repo!r} search_query={plan.search_query!r} goal={plan.goal!r}")
     logger.log_event(f"[cli] run_dir={logger.run_dir}")
-    vision = OpenAIVisionModel(model=args.vision_model) if os.getenv("OPENAI_API_KEY") else StubVisionModel()
+    api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    vision = OpenAIVisionModel(model=args.vision_model) if api_key else StubVisionModel()
     config = NavigatorConfig(
         headless=args.headless,
         verbose=not args.quiet,

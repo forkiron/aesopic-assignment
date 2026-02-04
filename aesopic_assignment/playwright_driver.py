@@ -74,29 +74,80 @@ class PlaywrightDriver:
 
     def click_by_role(self, role: str, name: str) -> bool:
         loc = self.page.get_by_role(role, name=name)
-        if loc.count() > 0:
-            loc.first.click()
+        if loc.count() == 0:
+            return False
+        try:
+            current_url = self.page.url
+            loc.first.scroll_into_view_if_needed()
+            with self.page.expect_navigation(timeout=5000, wait_until="domcontentloaded"):
+                loc.first.click(timeout=5000)
             return True
-        return False
+        except Exception:
+            # Click succeeded but no navigation (e.g. button, not link)
+            try:
+                loc.first.click(timeout=5000)
+                self.wait(500)  # Brief wait for any async updates
+            except Exception:
+                return False
+            return True
 
     def click_by_text(self, text: str) -> bool:
+        # Try link first (more likely to navigate)
+        link_loc = self.page.get_by_role("link", name=text)
+        if link_loc.count() > 0:
+            try:
+                link_loc.first.scroll_into_view_if_needed()
+                with self.page.expect_navigation(timeout=5000, wait_until="domcontentloaded"):
+                    link_loc.first.click(timeout=5000)
+                return True
+            except Exception:
+                pass
+        # Fallback to any text match
         loc = self.page.get_by_text(text, exact=False)
         if loc.count() > 0:
-            loc.first.click()
-            return True
+            try:
+                loc.first.scroll_into_view_if_needed()
+                with self.page.expect_navigation(timeout=5000, wait_until="domcontentloaded"):
+                    loc.first.click(timeout=5000)
+                return True
+            except Exception:
+                # Click succeeded but no navigation
+                try:
+                    loc.first.click(timeout=5000)
+                    self.wait(500)
+                except Exception:
+                    return False
+                return True
         return False
 
     def fill_search_and_submit(self, query: str) -> bool:
+        # GitHub home: "search" is a button that opens a dialog; we must click it first, then fill the real input.
         search = self.page.get_by_role("searchbox")
-        if search.count() == 0:
-            search = self.page.get_by_placeholder("Search or jump to...")
         if search.count() == 0:
             search = self.page.get_by_placeholder("Search GitHub")
         if search.count() == 0:
+            search = self.page.get_by_placeholder("Search or jump to...")
+        if search.count() == 0:
             return False
-        search.first.fill(query)
-        search.first.press("Enter")
-        return True
+        first = search.first
+        try:
+            first.fill(query)
+            first.press("Enter")
+            return True
+        except Exception:
+            # Element is the button (opens dialog), not the input. Click it, wait for input, then fill.
+            first.click()
+            self.wait(600)
+            input_loc = self.page.get_by_role("searchbox")
+            if input_loc.count() == 0:
+                input_loc = self.page.get_by_placeholder("Search GitHub")
+            if input_loc.count() == 0:
+                input_loc = self.page.locator("input[type='search']")
+            if input_loc.count() == 0:
+                return False
+            input_loc.first.fill(query)
+            input_loc.first.press("Enter")
+            return True
 
     def goto_search(self, query: str) -> None:
         self.goto(f"https://github.com/search?q={quote_plus(query)}&type=repositories")
