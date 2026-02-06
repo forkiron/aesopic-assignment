@@ -76,7 +76,7 @@
 
 - **What doesn't work well:** (1) Vision doesn't work for identifying the search button on home page. I can only currently take a picture and recognize its on home page, which prompts to search with a '/'. (2) LLM goal/repo parsing can misclassify (e.g. "custom" vs "latest_release"); we don't validate or correct. (3) Long release notes are truncated in the region or in parse_release_text (max tokens); we don't paginate or chunk.
 
-- **Honest assessment:** The pipeline works for the assigned path and through NLP prompts (repo → releases → correct latest release JSON). Edge cases (no key, API errors, wrong page) are partially handled with fallbacks and clear failure modes rather than hidden crashes.
+- **Honest assessment:** The pipeline works for the assigned path and through NLP prompts (home -> repo → releases → correct latest release JSON). BUT, the structure of the path is really straight forward, I initially wanted to build this so that it would create its OWN prompts every time it assesses a page. This way, no matter what page the user is on it is able to identify what to do rather than having the proper (home -> repo → releases → correct latest release JSON) flow.
 
 ## Future improvements
 
