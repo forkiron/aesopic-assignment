@@ -66,10 +66,12 @@ class Navigator:
 
             if vision_state.action == "type_search":
                 q = (vision_state.target or plan.search_query).strip()
-                if q and self.driver.fill_search_and_submit(q):
-                    self.logger.log_event(f"[nav] action fill_search query={q!r}")
-                    self._act(Action(kind="wait", value="1500"))
-                    continue
+                if q:
+                    ok, method = self.driver.fill_search_and_submit(q)
+                    if ok:
+                        self.logger.log_event(f"[nav] action fill_search query={q!r} (by {method})")
+                        self._act(Action(kind="wait", value="1500"))
+                        continue
                 # No goto_search fallback: stay on page and retry or continue (URL override may fix state next step)
                 self._act(Action(kind="wait", value="1500"))
                 continue
@@ -93,8 +95,10 @@ class Navigator:
                     continue
             if state.name == "home":
                 q = plan.search_query.strip()
-                if q and self.driver.fill_search_and_submit(q):
-                    self.logger.log_event(f"[nav] fallback fill_search query={q!r}")
+                if q:
+                    ok, method = self.driver.fill_search_and_submit(q)
+                    if ok:
+                        self.logger.log_event(f"[nav] fallback fill_search query={q!r} (by {method})")
                 self._act(Action(kind="wait", value="1500"))
                 continue
             if state.name == "search_results":

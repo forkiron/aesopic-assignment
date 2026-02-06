@@ -197,9 +197,12 @@ class PlaywrightDriver:
                 return True
         return False
 
-    def fill_search_and_submit(self, query: str) -> bool:
-        """On GitHub: '/' focuses search, type + Enter. Else: find searchbox by role/placeholder and fill + Enter."""
+    def fill_search_and_submit(self, query: str) -> tuple[bool, str]:
+        """On GitHub: try clicking search first, then type + Enter; fallback is '/' to focus. Returns (success, method) with method in ('click', 'fallback', 'role')."""
         if "github.com" in self.page.url:
+            if self._github_search_by_click(query):
+                return True, "click"
+            # Fallback: '/' focuses the search bar, then type + Enter
             self.page.keyboard.press("/")
             self.wait(500)
             self.page.keyboard.type(query, delay=80)
@@ -207,12 +210,52 @@ class PlaywrightDriver:
             self.page.keyboard.press("Enter")
             try:
                 self.page.wait_for_url(re.compile(r"github\.com/search\?q="), timeout=8000)
-                return True
+                return True, "fallback"
             except Exception:
                 pass
+            return ("github.com/search" in self.page.url, "fallback")
+        ok = self._search_by_role_or_placeholder(query)
+        return (ok, "role")
+
+    def _github_search_by_click(self, query: str) -> bool:
+        """Click the GitHub search box (or opener), fill and submit. Returns True if we reached search results."""
+        search = self.page.get_by_role("searchbox")
+        if search.count() == 0:
+            search = self.page.get_by_placeholder("Search GitHub")
+        if search.count() == 0:
+            search = self.page.get_by_placeholder("Search or jump to...")
+        if search.count() == 0:
+            return False
+        first = search.first
+        try:
+            first.scroll_into_view_if_needed()
+            first.click()
+            self.wait(400)
+            first.fill("")
+            first.fill(query)
+            first.press("Enter")
+            self.wait(1500)
             if "github.com/search" in self.page.url:
                 return True
-            return False
+        except Exception:
+            try:
+                first.click()
+                self.wait(800)
+                input_loc = self.page.get_by_role("searchbox")
+                if input_loc.count() == 0:
+                    input_loc = self.page.get_by_placeholder("Search GitHub")
+                if input_loc.count() > 0:
+                    input_loc.first.wait_for(state="visible", timeout=2000)
+                    input_loc.first.fill(query)
+                    input_loc.first.press("Enter")
+                    self.wait(1500)
+                    return "github.com/search" in self.page.url
+            except Exception:
+                pass
+        return False
+
+    def _search_by_role_or_placeholder(self, query: str) -> bool:
+        """Non-GitHub or generic: find searchbox by role/placeholder, click, fill, Enter."""
         search = self.page.get_by_role("searchbox")
         if search.count() == 0:
             search = self.page.get_by_placeholder("Search GitHub")
@@ -229,7 +272,6 @@ class PlaywrightDriver:
             first.press("Enter")
             return True
         except Exception:
-            # Opener button: click to open dialog, wait for input, then fill.
             first.click()
             self.wait(800)
             input_loc = self.page.get_by_role("searchbox")
@@ -237,10 +279,6 @@ class PlaywrightDriver:
                 input_loc = self.page.get_by_placeholder("Search GitHub")
             if input_loc.count() == 0:
                 return False
-            try:
-                input_loc.first.wait_for(state="visible", timeout=2000)
-            except Exception:
-                pass
             input_loc.first.fill(query)
             input_loc.first.press("Enter")
             return True
