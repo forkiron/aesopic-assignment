@@ -1,3 +1,4 @@
+"""Shared data structures for plan, navigation, and extraction. No business logic."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field

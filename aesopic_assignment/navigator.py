@@ -1,4 +1,4 @@
-"""Vision-first navigation: screenshot → OpenAI Vision → act via Playwright. No DOM scraping."""
+"""Vision-first navigation: screenshot → vision decides state/action → Playwright acts. URL can override state when vision misclassifies."""
 from __future__ import annotations
 
 from dataclasses import asdict
@@ -40,7 +40,7 @@ class Navigator:
                 timeout_ms=self.config.screenshot_timeout_ms,
             )
             state, vision_state = self._observe(plan, screenshot_path)
-            # URL overrides vision when we're clearly on a different page (e.g. search results still show header so vision says "home")
+            # Override: if URL says search/repo/releases but vision said "home", trust URL and fix action
             url_state = detect_state(url=self.driver.url(), title=self.driver.title(), text_sample="")
             if url_state.name in ("search_results", "repo_page", "releases_page") and state.name == "home":
                 state = url_state
@@ -57,7 +57,6 @@ class Navigator:
                 f"[nav] step={step+1} url={self.driver.url()!r} state={state.name} confidence={vision_state.confidence:.2f} action={vision_state.action or 'none'} target={vision_state.target or ''}"
             )
 
-            # Done?
             if state.name == "releases_page" or vision_state.action == "done":
                 self.logger.log_event("[nav] done (releases_page or action=done)")
                 return
@@ -65,7 +64,6 @@ class Navigator:
                 self.logger.log_event("[nav] done (goal=code on repo_page)")
                 return
 
-            # Act from vision (first layer) — search bar only, no URL fallback
             if vision_state.action == "type_search":
                 q = (vision_state.target or plan.search_query).strip()
                 if q and self.driver.fill_search_and_submit(q):
@@ -75,14 +73,13 @@ class Navigator:
                 # No goto_search fallback: stay on page and retry or continue (URL override may fix state next step)
                 self._act(Action(kind="wait", value="1500"))
                 continue
-
             if vision_state.action == "click" and vision_state.target:
                 if self.driver.click_by_text(vision_state.target) or self.driver.click_by_role("link", vision_state.target):
                     self.logger.log_event(f"[nav] action click target={vision_state.target!r}")
                     self._act(Action(kind="wait", value="1500"))
                     continue
 
-            # Fallback: URL-based (Playwright only, no DOM)
+            # Vision didn't act; try URL-based fallbacks
             if "/releases" in self.driver.url() and plan.repo in self.driver.url():
                 self.logger.log_event("[nav] fallback already_on_releases")
                 return
@@ -115,12 +112,11 @@ class Navigator:
         raise RuntimeError("Navigation failed: max steps exceeded")
 
     def _observe(self, plan: PlannerOutput, screenshot_path: Optional[str]) -> tuple[PageState, VisionDecision]:
+        """Vision classifies screenshot; if low confidence, use URL/title heuristic for state."""
         vision_state = self.vision.classify_state(screenshot_path, plan.required_entities, plan.goal)
         if screenshot_path and vision_state.confidence > 0:
             return PageState(vision_state.state, vision_state.confidence, "vision"), vision_state
-        url = self.driver.url()
-        title = self.driver.title()
-        heuristic = detect_state(url=url, title=title, text_sample="")
+        heuristic = detect_state(url=self.driver.url(), title=self.driver.title(), text_sample="")
         return heuristic, vision_state
 
     def _act(self, action: Action) -> None:

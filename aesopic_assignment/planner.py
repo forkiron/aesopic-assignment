@@ -1,3 +1,4 @@
+"""Builds a plan from CLI: repo and/or prompt. With prompt, LLM infers repo and goal; with repo only, goal is latest_release."""
 from __future__ import annotations
 
 import os
@@ -107,13 +108,12 @@ class Planner:
         return clean or list(DEFAULT_FIELDS)
 
     def _extract_repo(self, text: str) -> Optional[str]:
+        """Regex/heuristic: owner/name first, else single word as owner/name (skip common verbs)."""
         if not text:
             return None
-        # owner/name (e.g. openclaw/openclaw, facebook/react)
         match = re.search(r"([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)", text)
         if match:
             return match.group(1)
-        # Single repo name (e.g. "latest openclaw release" -> openclaw/openclaw)
         skip = {"latest", "release", "find", "the", "and", "its", "key", "features", "list", "get", "search", "for", "current", "related", "tags", "releases"}
         words = re.findall(r"\b([a-zA-Z][a-zA-Z0-9_.-]{1,40})\b", text)
         for w in words:

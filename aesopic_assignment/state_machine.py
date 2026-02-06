@@ -1,3 +1,4 @@
+"""URL/title-based page state detection. Used when vision is unavailable or to override vision (e.g. we're on search results but screenshot looks like home)."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -11,11 +12,12 @@ class PageState:
 
 
 def detect_state(url: str, title: str, text_sample: str) -> PageState:
+    """Infer page state from URL and title. text_sample is optional (e.g. for repo vs releases)."""
     normalized_title = title.lower()
     normalized_url = url.lower().rstrip("/")
     normalized_text = text_sample.lower()
 
-    # Exact GitHub home (must check before generic "github.com and path" rule).
+    # Home must be checked before repo (both match github.com).
     if normalized_url in ("https://github.com", "http://github.com"):
         return PageState("home", 0.85, "GitHub homepage URL")
     if "/search" in normalized_url or "search results" in normalized_title:

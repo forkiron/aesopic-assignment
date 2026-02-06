@@ -1,3 +1,4 @@
+"""Vision-first GitHub navigator and release extractor."""
 __all__ = [
     "planner",
     "navigator",

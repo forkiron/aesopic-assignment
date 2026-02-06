@@ -1,3 +1,4 @@
+"""Vision interface: classify page + action, locate release region, parse release text, one-shot extract, extract-for-prompt. OpenAI implementation + stub."""
 from __future__ import annotations
 
 import base64
@@ -87,6 +88,7 @@ class StubVisionModel(VisionModel):
 
 
 class OpenAIVisionModel(VisionModel):
+    """Uses OpenAI Responses API for image inputs (classify, locate, extract_release, extract_for_prompt); Chat for parse_release_text."""
     def __init__(self, model: str = "gpt-4o-mini", max_tokens: int = 400) -> None:
         self.model = model
         self.max_tokens = max_tokens
@@ -362,7 +364,7 @@ class OpenAIVisionModel(VisionModel):
             top = float(payload.get("top_percent", 0))
             bottom = float(payload.get("bottom_percent", 30))
             if top >= bottom:
-                bottom = top + 30
+                bottom = top + 30  # Sanity: region has positive height
             return {"top_percent": top, "bottom_percent": min(100, bottom)}
         except Exception as e:
             print(f"[vision] locate_latest_release_region failed: {type(e).__name__}: {e}", file=sys.stderr)
@@ -414,7 +416,7 @@ class OpenAIVisionModel(VisionModel):
 
 
 def _normalize_notes(notes: str) -> str:
-    """Collapse excessive newlines and trim so notes are readable."""
+    """Collapse runs of blank lines to one; trim each line and the whole string."""
     if not notes or not notes.strip():
         return notes
     lines = [line.strip() for line in notes.splitlines()]

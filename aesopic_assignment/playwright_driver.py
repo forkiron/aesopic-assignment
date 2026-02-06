@@ -1,4 +1,4 @@
-"""Playwright driver: launch browser, goto, screenshot (viewport), click/fill. Vision is first layer; this executes."""
+"""Browser control only: launch (Chrome/Chromium/Edge), goto, screenshot, zoom, get text in Y-range. Semantic clicks and search; no DOM selectors."""
 from __future__ import annotations
 
 import re
@@ -49,6 +49,7 @@ class PlaywrightDriver:
             pass
 
     def _launch(self):
+        """Prefer system Chrome, then Chromium, then Edge; else bundled Chromium."""
         for channel in ("chrome", "chromium", "msedge"):
             try:
                 return self.pw.chromium.launch(headless=self.config.headless, channel=channel)
@@ -120,7 +121,7 @@ class PlaywrightDriver:
             return 0
 
     def get_text_in_region(self, top_percent: float, bottom_percent: float) -> str:
-        """Get visible text that lies between top_percent and bottom_percent of the page height (0-100). No selectors; uses layout."""
+        """Text nodes whose layout Y (getBoundingClientRect + scrollY) falls in [top_percent, bottom_percent] of page height, joined by newline."""
         try:
             return self.page.evaluate(
                 """
@@ -197,8 +198,7 @@ class PlaywrightDriver:
         return False
 
     def fill_search_and_submit(self, query: str) -> bool:
-        """Use the page search bar: click/focus then type and submit (no URL change)."""
-        # 1) On GitHub, "/" focuses the search bar; type and Enter. Wait for navigation — do not click again.
+        """On GitHub: '/' focuses search, type + Enter. Else: find searchbox by role/placeholder and fill + Enter."""
         if "github.com" in self.page.url:
             self.page.keyboard.press("/")
             self.wait(500)
@@ -212,10 +212,7 @@ class PlaywrightDriver:
                 pass
             if "github.com/search" in self.page.url:
                 return True
-            # Navigation didn't happen; don't click search again (that was the bug). Try UI path only if we didn't use keyboard.
             return False
-
-        # 2) Not on GitHub: find search box by role/placeholder and fill (or click opener then fill).
         search = self.page.get_by_role("searchbox")
         if search.count() == 0:
             search = self.page.get_by_placeholder("Search GitHub")

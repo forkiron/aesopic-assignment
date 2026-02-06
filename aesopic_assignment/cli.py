@@ -1,3 +1,4 @@
+"""CLI entry point: parse args, load .env, build plan, run navigator + extractor, print JSON. Handles Ctrl+C and output shape (fixed release vs flexible result)."""
 from __future__ import annotations
 
 import argparse
@@ -7,7 +8,6 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Load .env from project root (directory containing aesopic_assignment/)
 _project_root = Path(__file__).resolve().parent.parent
 _env_path = _project_root / ".env"
 
@@ -56,7 +56,6 @@ def main() -> None:
         nav.run(plan)
         result = Extractor(nav.driver, vision=vision, logger=logger).extract(plan)
         if hasattr(result, "repository") and hasattr(result, "version"):
-            # Fixed release format when goal is latest_release
             out = {
                 "repository": result.repository,
                 "latest_release": {
@@ -72,7 +71,6 @@ def main() -> None:
             if result.assets:
                 out["latest_release"]["assets"] = [{"name": a.name, "url": a.url} for a in result.assets]
         else:
-            # Flexible format for prompt-driven (code/custom)
             out = result
         logger.log_result(out)
         print(json.dumps(out, indent=2))

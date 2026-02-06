@@ -7,7 +7,7 @@ Tool that uses **vision models** to autonomously navigate GitHub and extract rel
 1. Start at **github.com**
 2. **Search** for the repo (e.g. `openclaw`)
 3. **Click** the correct repository (e.g. `openclaw/openclaw`)
-4. **Click** the “Releases” section (or stop on the a specific page if the user asked for something else)
+4. **Click** the “Releases” section (or stop on the repo page if the user asked for something else)
 5. **Extract** the latest release as structured JSON (vision + text region + LLM parse)
 
 ## Setup
@@ -72,7 +72,7 @@ For “code” or “custom” goals the output is `{"repository": "...", "resul
 
 - **Source code** – this repo
 - **README.md** – this file (setup and run instructions)
-- **Observations document** – `OBSERVATIONS.md` (approach, trade-offs, limitations)
+- **Observations document** – `OBSERVATIONS.md` (file overview, design decisions, approach, edge cases & failure handling, testing & validation, critical reflection, trade-offs, limitations)
 - **Sample output** – `sample_output.json` (example JSON for openclaw/openclaw)
 
 ## Bonus features

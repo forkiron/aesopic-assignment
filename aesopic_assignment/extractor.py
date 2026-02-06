@@ -1,3 +1,4 @@
+"""Extraction after navigation: latest_release = zoom → locate region → get text → parse; code/custom = screenshot → answer prompt. Fallback: one-shot vision extract."""
 from __future__ import annotations
 
 import tempfile
@@ -11,7 +12,6 @@ from .vision import VisionModel
 
 
 class Extractor:
-    """Extract based on plan goal: latest_release -> fixed release JSON; code/custom -> prompt-driven result."""
 
     def __init__(
         self,
@@ -74,7 +74,6 @@ class Extractor:
                                     f"[extract] done (locate+text+parse) version={release.version!r} tag={release.tag!r} author={release.author!r}"
                                 )
                             return release
-                # Fallback: one-shot vision extraction
                 if self.logger:
                     self.logger.log_event("[extract] fallback: vision extract_release")
                 self.driver.set_zoom(1.0)
