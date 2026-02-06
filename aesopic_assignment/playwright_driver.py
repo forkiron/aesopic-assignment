@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import re
-import sys
-from urllib.parse import quote_plus
 from playwright.sync_api import sync_playwright
 
 from .models import NavigatorConfig
@@ -249,9 +247,6 @@ class PlaywrightDriver:
             input_loc.first.fill(query)
             input_loc.first.press("Enter")
             return True
-
-    def goto_search(self, query: str) -> None:
-        self.goto(f"https://github.com/search?q={quote_plus(query)}&type=repositories")
 
     def url(self) -> str:
         return self.page.url

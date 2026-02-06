@@ -13,4 +13,3 @@ pip-wheel-metadata/
 .DS_Store
 .env
 runs/
-chrome-profile/

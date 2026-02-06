@@ -5,7 +5,7 @@ import json
 import os
 import sys
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
 
@@ -26,9 +26,6 @@ class VisionModel:
         required_entities: List[str],
         goal: str = "latest_release",
     ) -> VisionDecision:
-        raise NotImplementedError
-
-    def locate_target(self, screenshot_path: str, label: str) -> Optional[Tuple[int, int]]:
         raise NotImplementedError
 
     def extract_release(
@@ -69,9 +66,6 @@ class StubVisionModel(VisionModel):
         goal: str = "latest_release",
     ) -> VisionDecision:
         return VisionDecision(confidence=0.0, state="unknown", found_entities=[], action=None, target=None)
-
-    def locate_target(self, screenshot_path: str, label: str) -> Optional[Tuple[int, int]]:
-        return None
 
     def extract_release(
         self, screenshot_path: str, repository: str, user_prompt: Optional[str] = None
