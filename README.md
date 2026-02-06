@@ -39,26 +39,43 @@ cp .env.example .env
 python -m aesopic_assignment.cli --repo openclaw/openclaw
 ```
 
-**With prompt (bonus):**
+**Natural language prompt (bonus):** Repo is inferred from the text; extraction can follow the ask (e.g. key features):
 
 ```bash
 python -m aesopic_assignment.cli --prompt "search for openclaw and get the current release and related tags"
+python -m aesopic_assignment.cli --prompt "Find the latest React release and list its key features"
 ```
 
 **Optional:** `--headless`, `--quiet`, `--action-delay-ms 1000`, `--screenshot-timeout-ms 8000`, `--no-block-resources` (disable image/font blocking if pages break)
 
-Output is JSON in the required shape, e.g.:
+Output is JSON in the required shape, with optional bonus fields (release notes, publish date, download links), e.g.:
 
 ```json
 {
   "repository": "openclaw/openclaw",
   "latest_release": {
-    "version": "v2026.1.29",
-    "tag": "77e703c",
-    "author": "steipete"
+    "version": "2026.2.3",
+    "tag": "v2026.2.3",
+    "author": "steipete",
+    "published_at": "yesterday",
+    "notes": "Release notes text...",
+    "assets": [{ "name": "Source code.zip", "url": "https://..." }]
   }
 }
 ```
+
+## Deliverables
+
+- **Source code** – this repo
+- **README.md** – this file (setup and run instructions)
+- **Observations document** – `OBSERVATIONS.md` (approach, trade-offs, limitations)
+- **Sample output** – `sample_output.json` (example JSON for openclaw/openclaw)
+
+## Bonus features
+
+- **Additional metadata:** Release notes, publish date, and download links (assets) are extracted when visible; the releases page is scrolled before capture so content below the fold is included.
+- **Any GitHub repository:** Use any `owner/repo` via CLI, e.g. `python -m aesopic_assignment.cli facebook/react`.
+- **Natural language prompts:** Use `--prompt "Find the latest React release and list its key features"`; the repo is inferred from the prompt and the instruction is passed to the vision extractor so notes can include key features when visible.
 
 ## Design
 

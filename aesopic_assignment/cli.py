@@ -54,21 +54,26 @@ def main() -> None:
 
     try:
         nav.run(plan)
-        result = Extractor(nav.driver, vision=vision, logger=logger).extract_latest(plan)
-        out = {
-            "repository": result.repository,
-            "latest_release": {
-                k: v for k, v in {
-                    "version": result.version,
-                    "tag": result.tag,
-                    "author": result.author,
-                    "published_at": result.published_at,
-                    "notes": result.notes,
-                }.items() if v is not None
-            },
-        }
-        if result.assets:
-            out["latest_release"]["assets"] = [{"name": a.name, "url": a.url} for a in result.assets]
+        result = Extractor(nav.driver, vision=vision, logger=logger).extract(plan)
+        if hasattr(result, "repository") and hasattr(result, "version"):
+            # Fixed release format when goal is latest_release
+            out = {
+                "repository": result.repository,
+                "latest_release": {
+                    k: v for k, v in {
+                        "version": result.version,
+                        "tag": result.tag,
+                        "author": result.author,
+                        "published_at": result.published_at,
+                        "notes": result.notes,
+                    }.items() if v is not None
+                },
+            }
+            if result.assets:
+                out["latest_release"]["assets"] = [{"name": a.name, "url": a.url} for a in result.assets]
+        else:
+            # Flexible format for prompt-driven (code/custom)
+            out = result
         logger.log_result(out)
         print(json.dumps(out, indent=2))
     except KeyboardInterrupt:

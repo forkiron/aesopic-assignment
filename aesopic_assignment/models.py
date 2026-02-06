@@ -13,6 +13,7 @@ class PlannerOutput:
     required_entities: List[str]
     success_criteria: List[str]
     search_query: str = ""
+    user_prompt: Optional[str] = None  # natural language prompt for flexible extraction
 
 
 @dataclass

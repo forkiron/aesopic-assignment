@@ -1,6 +1,8 @@
 """Playwright driver: launch browser, goto, screenshot (viewport), click/fill. Vision is first layer; this executes."""
 from __future__ import annotations
 
+import re
+import sys
 from urllib.parse import quote_plus
 from playwright.sync_api import sync_playwright
 
@@ -10,17 +12,37 @@ _BROWSER_MSG = (
     "No browser. Install Chrome, or run: python -m playwright install chromium"
 )
 
+_DEFAULT_VIEWPORT = {"width": 1280, "height": 720}
+
+
+def _get_viewport_from_screen() -> dict:
+    """Match viewport to user's primary screen size (capped so window fits)."""
+    try:
+        import screeninfo
+        monitors = screeninfo.get_monitors()
+        if not monitors:
+            return _DEFAULT_VIEWPORT
+        primary = next((m for m in monitors if m.is_primary), monitors[0])
+        # Use primary monitor dimensions; cap to avoid oversized window
+        w = min(primary.width, 1920)
+        h = min(primary.height, 1080)
+        if w < 800 or h < 600:
+            return _DEFAULT_VIEWPORT
+        return {"width": w, "height": h}
+    except Exception:
+        return _DEFAULT_VIEWPORT
+
 
 class PlaywrightDriver:
     def __init__(self, config: NavigatorConfig) -> None:
         self.config = config
         self.pw = sync_playwright().start()
         self.browser = self._launch()
-        self.context = self.browser.new_context(viewport={"width": 1920, "height": 1080})
+        viewport = _get_viewport_from_screen()
+        self.context = self.browser.new_context(viewport=viewport)
         self.page = self.context.new_page()
         self.page.set_default_timeout(config.timeout_ms)
-        if config.verbose:
-            self.page.on("console", lambda m: print(f"[browser] {m.text}"))
+        # Browser console not forwarded (was spamming ERR_FAILED from blocked resources)
         if config.block_resources:
             self._block_resources()
         try:
@@ -72,6 +94,62 @@ class PlaywrightDriver:
     def wait(self, ms: int) -> None:
         self.page.wait_for_timeout(ms)
 
+    def scroll_releases_page_for_extraction(self) -> None:
+        """Scroll the releases page so notes and download links below the fold are loaded/visible."""
+        try:
+            self.page.evaluate("window.scrollTo(0, 0)")
+            self.wait(400)
+            self.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            self.wait(800)
+            self.page.evaluate("window.scrollTo(0, 0)")
+            self.wait(400)
+        except Exception:
+            pass
+
+    def set_zoom(self, scale: float) -> None:
+        """Zoom the page (e.g. 0.5 = 50%) so more content fits in view. Resets with scale=1."""
+        try:
+            self.page.evaluate(f"document.body.style.zoom = '{max(0.25, min(2, scale))}'")
+            self.wait(300)
+        except Exception:
+            pass
+
+    def get_page_height(self) -> int:
+        """Total scroll height of the page in pixels."""
+        try:
+            return int(self.page.evaluate("document.documentElement.scrollHeight || document.body.scrollHeight"))
+        except Exception:
+            return 0
+
+    def get_text_in_region(self, top_percent: float, bottom_percent: float) -> str:
+        """Get visible text that lies between top_percent and bottom_percent of the page height (0-100). No selectors; uses layout."""
+        try:
+            return self.page.evaluate(
+                """
+                (function(topPct, bottomPct) {
+                    var h = document.documentElement.scrollHeight || document.body.scrollHeight;
+                    var y0 = (topPct / 100) * h;
+                    var y1 = (bottomPct / 100) * h;
+                    var out = [];
+                    var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+                    var node;
+                    while ((node = walker.nextNode())) {
+                        var el = node.parentElement;
+                        if (!el || el.offsetParent === null) continue;
+                        var r = el.getBoundingClientRect();
+                        var docY = r.top + window.scrollY;
+                        if (docY >= y0 && docY <= y1)
+                            out.push(node.textContent.trim());
+                    }
+                    return out.filter(Boolean).join('\\n');
+                })
+                """,
+                top_percent,
+                bottom_percent,
+            )
+        except Exception:
+            return ""
+
     def click_by_role(self, role: str, name: str) -> bool:
         loc = self.page.get_by_role(role, name=name)
         if loc.count() == 0:
@@ -121,7 +199,25 @@ class PlaywrightDriver:
         return False
 
     def fill_search_and_submit(self, query: str) -> bool:
-        # GitHub home: "search" is a button that opens a dialog; we must click it first, then fill the real input.
+        """Use the page search bar: click/focus then type and submit (no URL change)."""
+        # 1) On GitHub, "/" focuses the search bar; type and Enter. Wait for navigation — do not click again.
+        if "github.com" in self.page.url:
+            self.page.keyboard.press("/")
+            self.wait(500)
+            self.page.keyboard.type(query, delay=80)
+            self.wait(200)
+            self.page.keyboard.press("Enter")
+            try:
+                self.page.wait_for_url(re.compile(r"github\.com/search\?q="), timeout=8000)
+                return True
+            except Exception:
+                pass
+            if "github.com/search" in self.page.url:
+                return True
+            # Navigation didn't happen; don't click search again (that was the bug). Try UI path only if we didn't use keyboard.
+            return False
+
+        # 2) Not on GitHub: find search box by role/placeholder and fill (or click opener then fill).
         search = self.page.get_by_role("searchbox")
         if search.count() == 0:
             search = self.page.get_by_placeholder("Search GitHub")
@@ -131,20 +227,25 @@ class PlaywrightDriver:
             return False
         first = search.first
         try:
+            first.click()
+            self.wait(400)
+            first.fill("")
             first.fill(query)
             first.press("Enter")
             return True
         except Exception:
-            # Element is the button (opens dialog), not the input. Click it, wait for input, then fill.
+            # Opener button: click to open dialog, wait for input, then fill.
             first.click()
-            self.wait(600)
+            self.wait(800)
             input_loc = self.page.get_by_role("searchbox")
             if input_loc.count() == 0:
                 input_loc = self.page.get_by_placeholder("Search GitHub")
             if input_loc.count() == 0:
-                input_loc = self.page.locator("input[type='search']")
-            if input_loc.count() == 0:
                 return False
+            try:
+                input_loc.first.wait_for(state="visible", timeout=2000)
+            except Exception:
+                pass
             input_loc.first.fill(query)
             input_loc.first.press("Enter")
             return True

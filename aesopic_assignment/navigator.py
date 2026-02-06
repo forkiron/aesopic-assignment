@@ -30,7 +30,7 @@ class Navigator:
         github_home = "https://github.com"
         repo_url = f"https://github.com/{plan.repo}"
         self.logger.log_event(f"[nav] start repo={plan.repo} search_query={plan.search_query}")
-        self.logger.log_event(f"[nav] action goto url={github_home}")
+        self.logger.log_event(f"[nav] action goto url={github_home} goal={plan.goal}")
         self._act(Action(kind="goto", target=github_home))
         self._act(Action(kind="wait", value="2000"))
 
@@ -40,24 +40,39 @@ class Navigator:
                 timeout_ms=self.config.screenshot_timeout_ms,
             )
             state, vision_state = self._observe(plan, screenshot_path)
+            # URL overrides vision when we're clearly on a different page (e.g. search results still show header so vision says "home")
+            url_state = detect_state(url=self.driver.url(), title=self.driver.title(), text_sample="")
+            if url_state.name in ("search_results", "repo_page", "releases_page") and state.name == "home":
+                state = url_state
+                if url_state.name == "search_results":
+                    vision_state = VisionDecision(url_state.confidence, url_state.name, vision_state.found_entities, "click", plan.repo)
+                elif url_state.name == "repo_page":
+                    if plan.goal == "code":
+                        vision_state = VisionDecision(url_state.confidence, url_state.name, vision_state.found_entities, "done", None)
+                    else:
+                        vision_state = VisionDecision(url_state.confidence, url_state.name, vision_state.found_entities, "click", "Releases")
+                else:
+                    vision_state = VisionDecision(url_state.confidence, url_state.name, vision_state.found_entities, "done", None)
             self.logger.log_event(
                 f"[nav] step={step+1} url={self.driver.url()!r} state={state.name} confidence={vision_state.confidence:.2f} action={vision_state.action or 'none'} target={vision_state.target or ''}"
             )
 
             # Done?
             if state.name == "releases_page" or vision_state.action == "done":
-                self.logger.log_event("[nav] reached releases")
+                self.logger.log_event("[nav] done (releases_page or action=done)")
+                return
+            if plan.goal == "code" and state.name == "repo_page":
+                self.logger.log_event("[nav] done (goal=code on repo_page)")
                 return
 
-            # Act from vision (first layer)
+            # Act from vision (first layer) — search bar only, no URL fallback
             if vision_state.action == "type_search":
                 q = (vision_state.target or plan.search_query).strip()
                 if q and self.driver.fill_search_and_submit(q):
                     self.logger.log_event(f"[nav] action fill_search query={q!r}")
                     self._act(Action(kind="wait", value="1500"))
                     continue
-                self.logger.log_event(f"[nav] action goto_search query={plan.search_query!r}")
-                self.driver.goto_search(plan.search_query)
+                # No goto_search fallback: stay on page and retry or continue (URL override may fix state next step)
                 self._act(Action(kind="wait", value="1500"))
                 continue
 
@@ -72,13 +87,17 @@ class Navigator:
                 self.logger.log_event("[nav] fallback already_on_releases")
                 return
             if state.name == "repo_page":
+                if plan.goal == "code":
+                    self.logger.log_event("[nav] fallback goal=code on repo_page, done")
+                    return
                 if self.driver.click_by_role("link", "Releases") or self.driver.click_by_text("Releases"):
                     self.logger.log_event("[nav] fallback click Releases")
                     self._act(Action(kind="wait", value="1500"))
                     continue
             if state.name == "home":
-                self.logger.log_event(f"[nav] fallback goto_search query={plan.search_query!r}")
-                self.driver.goto_search(plan.search_query)
+                q = plan.search_query.strip()
+                if q and self.driver.fill_search_and_submit(q):
+                    self.logger.log_event(f"[nav] fallback fill_search query={q!r}")
                 self._act(Action(kind="wait", value="1500"))
                 continue
             if state.name == "search_results":
@@ -96,7 +115,7 @@ class Navigator:
         raise RuntimeError("Navigation failed: max steps exceeded")
 
     def _observe(self, plan: PlannerOutput, screenshot_path: Optional[str]) -> tuple[PageState, VisionDecision]:
-        vision_state = self.vision.classify_state(screenshot_path, plan.required_entities)
+        vision_state = self.vision.classify_state(screenshot_path, plan.required_entities, plan.goal)
         if screenshot_path and vision_state.confidence > 0:
             return PageState(vision_state.state, vision_state.confidence, "vision"), vision_state
         url = self.driver.url()
