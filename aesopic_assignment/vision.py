@@ -324,7 +324,7 @@ class OpenAIVisionModel(VisionModel):
         try:
             image_url = _image_to_data_url(screenshot_path)
             instructions = (
-                "This is a GitHub releases page. One release is marked as the current latest (usually a green \"Latest\" badge at the top). "
+                "This is a GitHub releases page. You should see that it states (latest release) or (Latest) somewhere on the page. "
                 "Identify where that single release block starts and ends vertically. Reply with two numbers as a percentage of the full page height: "
                 "top_percent (where the latest release section starts, often near 0) and bottom_percent (where it ends, before the next release). "
                 "Be precise so we capture only that block, not older releases below."
